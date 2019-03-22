@@ -178,7 +178,10 @@ func (g *Gateway) Select(dest interface{}, params map[string]interface{}) error 
 		names = append(names, k)
 	}
 
-	q := fmt.Sprintf("SELECT * FROM `%s` WHERE %s", g.table, strings.Join(quoteSelectSet(names), " AND "))
+	q := fmt.Sprintf("SELECT * FROM `%s`", g.table)
+	if len(names) > 0 {
+		q = q + " " + fmt.Sprintf("WHERE %s", strings.Join(quoteSelectSet(names), " AND "))
+	}
 
 	err := g.dbx.Select(dest, q, args...)
 	if err != nil {
