@@ -27,7 +27,9 @@ const (
 	tagDB      = "db"
 	tagTGW     = "tgw"
 	tgwPrimary = "primary"
-	tgwWrite   = "write"
+	tgwInsert  = "insert"
+	tgwSelect  = "read"
+	tgwUpdate  = "update"
 )
 
 // Gateway is the main struct
@@ -36,12 +38,19 @@ type Gateway struct {
 	table string
 }
 
+// Selectors holds query parameters for simple selects
+type Selectors map[string]interface{}
+
+// OrderBy holds ordering informations for queries
+type OrderBy map[string]string
+
 // tabMeta stores informations about given struct
 type tabMeta struct {
 	PrimaryName string
 	PrimaryDB   string
-	WriteCols   []string
-	SkipCols    []string
+	InsertCols  []string
+	SelectCols  []string
+	UpdateCols  []string
 }
 
 // Errors...
@@ -70,8 +79,8 @@ func (g *Gateway) Create(dest interface{}) error {
 	q := fmt.Sprintf(
 		"INSERT INTO `%s` (%s) VALUES (%s)",
 		g.table,
-		strings.Join(quoteIdents(destcfg.WriteCols), ","),
-		strings.Join(quoteNamedValues(destcfg.WriteCols), ","),
+		strings.Join(quoteIdents(destcfg.InsertCols), ","),
+		strings.Join(quoteNamedValues(destcfg.InsertCols), ","),
 	)
 
 	res, err := g.dbx.NamedExec(q, dest)
@@ -125,7 +134,7 @@ func (g *Gateway) Update(dest interface{}) error {
 	q := fmt.Sprintf(
 		"UPDATE `%s` SET %s WHERE `%s` = :%s",
 		g.table,
-		strings.Join(quoteUpdateSet(destcfg.WriteCols), ","),
+		strings.Join(quoteUpdateSet(destcfg.UpdateCols), ","),
 		destcfg.PrimaryDB,
 		destcfg.PrimaryDB,
 	)
@@ -165,7 +174,7 @@ func (g *Gateway) Delete(dest interface{}) error {
 }
 
 // Select is a simple select interface using a map as query parameters.
-func (g *Gateway) Select(dest interface{}, params map[string]interface{}) error {
+func (g *Gateway) Select(dest interface{}, params Selectors, orderby OrderBy) error {
 
 	//noinspection GoPreferNilSlice
 	args := []interface{}{}
@@ -181,6 +190,15 @@ func (g *Gateway) Select(dest interface{}, params map[string]interface{}) error 
 	q := fmt.Sprintf("SELECT * FROM `%s`", g.table)
 	if len(names) > 0 {
 		q = q + " " + fmt.Sprintf("WHERE %s", strings.Join(quoteSelectSet(names), " AND "))
+	}
+
+	if len(orderby) > 0 {
+		//noinspection GoPreferNilSlice
+		obs := []string{}
+		for k, v := range orderby {
+			obs = append(obs, k+" "+v)
+		}
+		q = q + " ORDER BY " + strings.Join(obs, ",")
 	}
 
 	err := g.dbx.Select(dest, q, args...)
@@ -244,8 +262,9 @@ func parseMeta(dest interface{}) (*tabMeta, error) {
 	s := tabMeta{
 		PrimaryName: "",
 		PrimaryDB:   "",
-		WriteCols:   []string{},
-		SkipCols:    []string{},
+		InsertCols:  []string{},
+		UpdateCols:  []string{},
+		SelectCols:  []string{},
 	}
 
 	e := reflect.TypeOf(dest).Elem()
@@ -265,11 +284,14 @@ func parseMeta(dest interface{}) (*tabMeta, error) {
 			s.PrimaryDB = dbname
 		}
 
-		// Either write or skip
-		if inArray(tgwWrite, ops) {
-			s.WriteCols = append(s.WriteCols, dbname)
-		} else {
-			s.SkipCols = append(s.SkipCols, dbname)
+		if inArray(tgwInsert, ops) {
+			s.InsertCols = append(s.InsertCols, dbname)
+		}
+		if inArray(tgwUpdate, ops) {
+			s.UpdateCols = append(s.UpdateCols, dbname)
+		}
+		if inArray(tgwSelect, ops) {
+			s.SelectCols = append(s.SelectCols, dbname)
 		}
 	}
 
@@ -277,7 +299,7 @@ func parseMeta(dest interface{}) (*tabMeta, error) {
 		return nil, ErrNoPrimary
 	}
 
-	if len(s.WriteCols) == 0 {
+	if len(s.InsertCols) == 0 {
 		return nil, ErrStructConfig
 	}
 
