@@ -28,7 +28,6 @@ const (
 	tagTGW     = "tgw"
 	tgwPrimary = "primary"
 	tgwInsert  = "insert"
-	tgwSelect  = "read"
 	tgwUpdate  = "update"
 )
 
@@ -49,7 +48,6 @@ type tabMeta struct {
 	PrimaryName string
 	PrimaryDB   string
 	InsertCols  []string
-	SelectCols  []string
 	UpdateCols  []string
 }
 
@@ -85,7 +83,6 @@ func (g *Gateway) Create(dest interface{}) error {
 
 	res, err := g.dbx.NamedExec(q, dest)
 	if err != nil {
-		fmt.Println("[SQLERR]", "[CREATE]", q)
 		return err
 	}
 
@@ -116,7 +113,6 @@ func (g *Gateway) Read(dest interface{}) error {
 	err = g.dbx.Get(dest, q, getPriVal(dest, destcfg))
 
 	if err != nil {
-		fmt.Println("[SQLERR]", "[READ]", q)
 		return err
 	}
 
@@ -142,7 +138,6 @@ func (g *Gateway) Update(dest interface{}) error {
 	_, err = g.dbx.NamedExec(q, dest)
 
 	if err != nil {
-		fmt.Println("[SQLERR]", "[UPDATE]", q)
 		return err
 	}
 
@@ -166,7 +161,6 @@ func (g *Gateway) Delete(dest interface{}) error {
 	_, err = g.dbx.Exec(q, getPriVal(dest, destcfg))
 
 	if err != nil {
-		fmt.Println("[SQLERR]", "[DELETE]", q)
 		return err
 	}
 
@@ -264,7 +258,6 @@ func parseMeta(dest interface{}) (*tabMeta, error) {
 		PrimaryDB:   "",
 		InsertCols:  []string{},
 		UpdateCols:  []string{},
-		SelectCols:  []string{},
 	}
 
 	e := reflect.TypeOf(dest).Elem()
@@ -289,9 +282,6 @@ func parseMeta(dest interface{}) (*tabMeta, error) {
 		}
 		if inArray(tgwUpdate, ops) {
 			s.UpdateCols = append(s.UpdateCols, dbname)
-		}
-		if inArray(tgwSelect, ops) {
-			s.SelectCols = append(s.SelectCols, dbname)
 		}
 	}
 
